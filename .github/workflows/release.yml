@@ -24,6 +24,7 @@ jobs:
           python -m pip install .
           release-lens manifest dist
           release-lens audit dist --expected-version "${GITHUB_REF_NAME#v}" --strict
+          rm dist/SHA256SUMS
       - name: Create checksums
         run: sha256sum dist/* > SHA256SUMS
       - name: Publish GitHub release
