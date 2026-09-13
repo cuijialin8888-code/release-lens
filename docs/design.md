@@ -35,7 +35,7 @@ does not follow links or materialize any archive member.
 ## Version handling
 
 Wheel and sdist metadata are authoritative when present. A local
-`pyproject.toml` version is compared when Python's built-in `tomllib` is
-available (Python 3.11+). On Python 3.10, the audit remains usable but does not
-parse TOML without an optional dependency. Pass `--expected-version` for an
-explicit release gate.
+`pyproject.toml` version is compared with Python's built-in `tomllib` when it
+is available (Python 3.11+). Python 3.10 uses a deliberately narrow fallback
+for quoted static `project.name` and `project.version` fields; dynamic or
+complex TOML metadata should be gated explicitly with `--expected-version`.

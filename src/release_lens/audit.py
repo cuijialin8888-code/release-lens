@@ -164,7 +164,27 @@ def _source_metadata(root: Path) -> tuple[str | None, str | None, str | None]:
     try:
         import tomllib  # type: ignore[attr-defined]
     except ModuleNotFoundError:
-        return None, None, "Python 3.10 cannot parse pyproject.toml without an optional TOML parser"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            return None, None, f"Cannot read pyproject.toml: {exc}"
+        section = False
+        values: dict[str, str] = {}
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if line.startswith("[") and line.endswith("]"):
+                section = line == "[project]"
+                continue
+            if not section or "=" not in line or line.startswith("#"):
+                continue
+            key, raw_value = (part.strip() for part in line.split("=", 1))
+            if key in {"name", "version"}:
+                match = re.fullmatch(r"[\"']([^\"']+)[\"'](?:\s*#.*)?", raw_value)
+                if match:
+                    values[key] = match.group(1)
+        if "name" in values or "version" in values:
+            return values.get("version"), values.get("name"), None
+        return None, None, "Python 3.10 fallback could not find static [project] name/version"
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError) as exc:
