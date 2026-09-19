@@ -21,7 +21,7 @@ It is deliberately small and conservative:
 - **Read-only audit:** `audit` never extracts, installs, imports, or executes an artifact.
 - **Offline by default:** it reads only the directory you pass and uses Python's standard library.
 - **Evidence first:** every finding has a stable `RLA###` code and local evidence.
-- **Format friendly:** terminal, JSON, and Markdown output work in CI or a release checklist.
+- **Format friendly:** terminal, JSON, Markdown, and SARIF 2.1.0 output work in CI or a release checklist.
 
 ## 30-second start
 
@@ -54,6 +54,12 @@ For a machine-readable gate:
 release-lens audit dist --expected-version 0.1.0 --format json --strict
 ```
 
+For a code-scanning-compatible CI artifact:
+
+```console
+release-lens audit dist --expected-version 0.1.0 --format sarif --output release-lens.sarif
+```
+
 Generate a manifest only when you explicitly request it:
 
 ```console
@@ -71,7 +77,7 @@ The audit exits with code `1` for errors, and with `--strict` also for warnings.
 | Python artifacts | Wheel `METADATA` and `RECORD`; sdist `PKG-INFO` |
 | Archive safety | Absolute paths, parent-directory paths, duplicate ZIP names, and tar links |
 | Integrity | GNU/BSD/plain SHA-256 manifests, missing entries, mismatches, and uncovered assets |
-| Reporting | Stable finding codes, artifact digest/size, JSON, Markdown, and terminal output |
+| Reporting | Stable finding codes, artifact digest/size, JSON, Markdown, SARIF, and terminal output |
 
 ## Safety boundary
 

@@ -22,6 +22,20 @@ class CliTests(unittest.TestCase):
             self.assertEqual(document["read_only"], True)
             self.assertEqual(document["summary"]["errors"], 1)
 
+    def test_sarif_report_is_machine_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = main(["audit", str(root), "--format", "sarif"])
+            document = json.loads(output.getvalue())
+            self.assertEqual(code, 1)
+            self.assertEqual(document["version"], "2.1.0")
+            self.assertEqual(
+                document["runs"][0]["tool"]["driver"]["name"], "release-lens"
+            )
+            self.assertEqual(document["runs"][0]["results"][0]["ruleId"], "RLA002")
+
     def test_manifest_command_writes_explicit_output(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

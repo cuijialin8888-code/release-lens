@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .audit import audit, write_manifest
 from .models import Report
+from .sarif import render_sarif
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -19,7 +20,7 @@ def _parser() -> argparse.ArgumentParser:
     audit_parser.add_argument("path", type=Path)
     audit_parser.add_argument("--expected-version", metavar="VERSION", help="compare package metadata with VERSION")
     audit_parser.add_argument("--strict", action="store_true", help="treat warnings as errors")
-    audit_parser.add_argument("--format", choices=("text", "json", "markdown"), default="text")
+    audit_parser.add_argument("--format", choices=("text", "json", "markdown", "sarif"), default="text")
     audit_parser.add_argument("--output", type=Path, help="write the selected report to a file")
     manifest_parser = sub.add_parser("manifest", help="write a SHA256SUMS file for release assets")
     manifest_parser.add_argument("path", type=Path)
@@ -73,6 +74,8 @@ def _render(report: Report, fmt: str) -> str:
         return json.dumps(report.as_dict(), ensure_ascii=False, indent=2) + "\n"
     if fmt == "markdown":
         return _markdown(report)
+    if fmt == "sarif":
+        return render_sarif(report)
     return _text(report)
 
 

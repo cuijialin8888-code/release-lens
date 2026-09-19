@@ -10,7 +10,7 @@
 - 默认不联网，只读取你指定的发布目录；
 - 运行时零第三方依赖，只使用 Python 标准库；
 - 每条问题都有稳定的 `RLA###` 编号，并提供本地证据；
-- 支持终端、JSON、Markdown 报告。
+- 支持终端、JSON、Markdown 和 SARIF 2.1.0 报告。
 
 ## 30 秒开始
 
@@ -26,6 +26,12 @@ release-lens manifest dist
 release-lens audit dist --expected-version 0.1.0 --format json --strict
 ```
 
+如需生成可供代码扫描系统消费的 CI 报告：
+
+```console
+release-lens audit dist --expected-version 0.1.0 --format sarif --output release-lens.sarif
+```
+
 有错误时 `audit` 返回退出码 `1`；使用 `--strict` 时，警告也会使检查失败。
 
 ## 检查内容
@@ -36,7 +42,7 @@ release-lens audit dist --expected-version 0.1.0 --format json --strict
 | Python 包 | wheel 的 `METADATA`/`RECORD`、sdist 的 `PKG-INFO` |
 | 压缩包安全 | 绝对路径、父目录路径、重复 ZIP 成员、tar 链接 |
 | 完整性 | GNU/BSD/普通格式 SHA-256 清单、缺失项、摘要不匹配、未覆盖资产 |
-| 输出 | 稳定问题编号、资产摘要/大小、终端/JSON/Markdown |
+| 输出 | 稳定问题编号、资产摘要/大小、终端/JSON/Markdown/SARIF |
 
 ## 边界
 
