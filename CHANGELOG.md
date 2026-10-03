@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Harden cross-platform archive paths, bound metadata reads, reject linked release assets and non-local checksum references, and protect audited artifacts from report writes.
+
 ## 0.1.0 — 2026-09-13
 
 - Initial public release.
