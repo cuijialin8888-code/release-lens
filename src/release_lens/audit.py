@@ -314,7 +314,7 @@ def audit(root: Path, expected_version: str | None = None, strict: bool = False)
 def write_manifest(root: Path, output: Path) -> int:
     root = root.expanduser().resolve()
     output = output.expanduser()
-    if any(path.is_symlink() for path in (output, *output.parents)):
+    if output.is_symlink():
         raise ValueError("Manifest output cannot follow symbolic links")
     if _kind(output) in {"wheel", "sdist", "zip"}:
         raise ValueError("Manifest output cannot replace a package archive")

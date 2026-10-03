@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             root = args.path.expanduser().resolve()
             if candidate == root or root in candidate.parents:
                 raise ValueError("audit report output must be outside the release directory")
-            if any(path.is_symlink() for path in (output, *output.parents)):
+            if output.is_symlink():
                 raise ValueError("audit report output cannot follow symbolic links")
             output.write_text(rendered, encoding="utf-8", newline="\n")
         except (OSError, ValueError) as exc:

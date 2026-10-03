@@ -11,6 +11,22 @@ from release_lens.cli import main
 
 
 class ReleaseSafetyTests(unittest.TestCase):
+    def test_manifest_cannot_follow_an_output_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "release"
+            root.mkdir()
+            (root / "asset.txt").write_bytes(b"asset")
+            protected = Path(directory) / "original.txt"
+            protected.write_bytes(b"preserve")
+            output = Path(directory) / "linked-manifest.txt"
+            try:
+                output.symlink_to(protected)
+            except OSError:
+                self.skipTest("symbolic links unavailable")
+            with self.assertRaises(ValueError):
+                write_manifest(root, output)
+            self.assertEqual(protected.read_bytes(), b"preserve")
+
     def test_windows_absolute_and_drive_relative_archive_members_are_unsafe(self):
         for member in ("C:/escape.txt", "C:escape.txt", "\\\\server\\share\\escape.txt", "\\escape.txt"):
             with self.subTest(member=member), tempfile.TemporaryDirectory() as directory:
