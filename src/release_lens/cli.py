@@ -94,8 +94,15 @@ def main(argv: list[str] | None = None) -> int:
     rendered = _render(report, args.format)
     if args.output:
         try:
-            args.output.write_text(rendered, encoding="utf-8", newline="\n")
-        except OSError as exc:
+            output = args.output.expanduser()
+            candidate = output.resolve()
+            root = args.path.expanduser().resolve()
+            if candidate == root or root in candidate.parents:
+                raise ValueError("audit report output must be outside the release directory")
+            if output.is_symlink():
+                raise ValueError("audit report output cannot follow symbolic links")
+            output.write_text(rendered, encoding="utf-8", newline="\n")
+        except (OSError, ValueError) as exc:
             print(f"release-lens: cannot write report: {exc}", file=sys.stderr)
             return 2
     else:

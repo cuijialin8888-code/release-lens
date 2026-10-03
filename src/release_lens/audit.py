@@ -5,7 +5,7 @@ import re
 import tarfile
 import zipfile
 from email.parser import Parser
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable
 
 from .models import Artifact, Finding, Report
@@ -16,6 +16,7 @@ GNU_RE = re.compile(r"^([0-9a-fA-F]{64})[ \t]+[* ](.+?)\s*$")
 BSD_RE = re.compile(r"^SHA256 \((.+)\) = ([0-9a-fA-F]{64})\s*$", re.I)
 PLAIN_RE = re.compile(r"^([0-9a-fA-F]{64})[ \t]+(.+?)\s*$")
 CHECKSUM_NAMES = {"sha256sums", "sha256sums.txt", "checksums.txt", "sha256.txt"}
+MAX_METADATA_BYTES = 1024 * 1024
 
 
 def _finding(code: str, severity: str, message: str, evidence: str = "", next_step: str = "") -> Finding:
@@ -41,7 +42,14 @@ def _safe_member(name: str) -> bool:
     if not name or "\x00" in name:
         return False
     path = PurePosixPath(name.replace("\\", "/"))
-    return not path.is_absolute() and ".." not in path.parts
+    return not path.is_absolute() and not PureWindowsPath(name).drive and ".." not in path.parts
+
+
+def _read_metadata(handle) -> tuple[str | None, str | None]:
+    raw = handle.read(MAX_METADATA_BYTES + 1)
+    if len(raw) > MAX_METADATA_BYTES:
+        raise ValueError("package metadata exceeds the 1 MiB limit")
+    return _metadata(raw.decode("utf-8", "replace"))
 
 
 def _metadata(raw: str) -> tuple[str | None, str | None]:
@@ -64,7 +72,8 @@ def _inspect_zip(path: Path) -> tuple[str | None, str | None, list[Finding]]:
                                             "Remove absolute or parent-directory members before publishing."))
             metadata_names = [n for n in names if n.endswith(".dist-info/METADATA")]
             if metadata_names:
-                project_name, version = _metadata(archive.read(metadata_names[0]).decode("utf-8", "replace"))
+                with archive.open(metadata_names[0]) as handle:
+                    project_name, version = _read_metadata(handle)
             if path.name.endswith(".whl"):
                 record_names = [n for n in names if n.endswith(".dist-info/RECORD")]
                 if not record_names:
@@ -73,7 +82,7 @@ def _inspect_zip(path: Path) -> tuple[str | None, str | None, list[Finding]]:
                 if not metadata_names:
                     findings.append(_finding("RLA104", "error", "Wheel has no dist-info/METADATA file", path.name,
                                             "Build the wheel with package metadata included."))
-    except (OSError, zipfile.BadZipFile, UnicodeError) as exc:
+    except (OSError, zipfile.BadZipFile, UnicodeError, ValueError, RuntimeError, NotImplementedError) as exc:
         findings.append(_finding("RLA003", "error", "Cannot read ZIP or wheel archive", f"{path.name}: {exc}",
                                 "Rebuild the artifact and rerun the audit."))
     return project_name, version, findings
@@ -96,11 +105,12 @@ def _inspect_tar(path: Path) -> tuple[str | None, str | None, list[Finding]]:
             if pkg_infos:
                 handle = archive.extractfile(pkg_infos[0])
                 if handle is not None:
-                    project_name, version = _metadata(handle.read().decode("utf-8", "replace"))
+                    with handle:
+                        project_name, version = _read_metadata(handle)
             else:
                 findings.append(_finding("RLA103", "warning", "Source archive has no PKG-INFO metadata", path.name,
                                         "Include package metadata when publishing a Python source distribution."))
-    except (OSError, tarfile.TarError, UnicodeError) as exc:
+    except (OSError, tarfile.TarError, UnicodeError, ValueError, EOFError) as exc:
         findings.append(_finding("RLA003", "error", "Cannot read source archive", f"{path.name}: {exc}",
                                 "Rebuild the artifact and rerun the audit."))
     return project_name, version, findings
@@ -159,7 +169,7 @@ def _parse_checksum_lines(path: Path) -> tuple[dict[str, str], list[Finding]]:
 
 def _source_metadata(root: Path) -> tuple[str | None, str | None, str | None]:
     path = root / "pyproject.toml"
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         return None, None, None
     try:
         import tomllib  # type: ignore[attr-defined]
@@ -218,7 +228,12 @@ def _check_checksums(root: Path, files: list[Path], report: Report) -> None:
         records, findings = _parse_checksum_lines(manifest)
         report.findings.extend(findings)
         for target, expected in records.items():
-            candidate = by_name.get(Path(target).name)
+            normalized = PurePosixPath(target.replace("\\", "/"))
+            if not _safe_member(target) or len(normalized.parts) != 1:
+                report.findings.append(_finding("RLA207", "error", "Checksum references a non-local artifact path",
+                                                f"{manifest.name}: {target}", "Use a direct artifact filename in this release directory."))
+                continue
+            candidate = by_name.get(normalized.name)
             if candidate is None:
                 report.findings.append(_finding("RLA204", "error", "Checksum references a missing artifact",
                                                 f"{manifest.name}: {target}", "Remove stale entries or restore the artifact."))
@@ -228,7 +243,10 @@ def _check_checksums(root: Path, files: list[Path], report: Report) -> None:
                 report.findings.append(_finding("RLA205", "error", "Artifact checksum does not match manifest",
                                                 f"{candidate.name}: expected {expected}, actual {actual}",
                                                 "Regenerate the manifest after the final artifact is built."))
-        covered = {Path(name).name for name in records}
+        covered = {
+            PurePosixPath(name.replace("\\", "/")).name for name in records
+            if _safe_member(name) and len(PurePosixPath(name.replace("\\", "/")).parts) == 1
+        }
         for file in files:
             if file == manifest or _is_checksum_file(file):
                 continue
@@ -246,7 +264,12 @@ def audit(root: Path, expected_version: str | None = None, strict: bool = False)
     if not root.is_dir():
         report.findings.append(_finding("RLA001", "error", "Audit target is not a directory", str(root)))
         return report
-    files = sorted((p for p in root.iterdir() if p.is_file()), key=lambda p: p.name.lower())
+    entries = sorted(root.iterdir(), key=lambda p: p.name.lower())
+    for path in entries:
+        if path.is_symlink():
+            report.findings.append(_finding("RLA006", "error", "Release directory contains a symbolic link", path.name,
+                                            "Publish a regular file; linked targets are not read or hashed."))
+    files = [p for p in entries if not p.is_symlink() and p.is_file()]
     artifact_files = [p for p in files if not _is_checksum_file(p)]
     if not artifact_files:
         report.findings.append(_finding("RLA002", "error", "No release artifacts found", str(root),
@@ -290,9 +313,16 @@ def audit(root: Path, expected_version: str | None = None, strict: bool = False)
 
 def write_manifest(root: Path, output: Path) -> int:
     root = root.expanduser().resolve()
+    output = output.expanduser()
+    if output.is_symlink():
+        raise ValueError("Manifest output cannot follow symbolic links")
+    if _kind(output) in {"wheel", "sdist", "zip"}:
+        raise ValueError("Manifest output cannot replace a package archive")
     output = output.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Not a release directory: {root}")
+    if any(path.is_symlink() for path in root.iterdir()):
+        raise ValueError("Release directory contains symbolic links; no manifest was written")
     files = sorted((p for p in root.iterdir() if p.is_file() and p != output and not _is_checksum_file(p)), key=lambda p: p.name.lower())
     output.write_text("".join(f"{_sha256(p)}  {p.name}\n" for p in files), encoding="utf-8", newline="\n")
     return len(files)

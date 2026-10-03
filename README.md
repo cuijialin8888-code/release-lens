@@ -88,6 +88,10 @@ Archive members are inspected without extraction. See
 [the design and limitations](docs/design.md) before using the result as a
 release policy.
 
+## Portable archive and report safety
+
+On `main` (unreleased), archive paths are checked for Windows drive-absolute, drive-relative, UNC, and rooted paths as well as POSIX traversal. Package metadata reads are capped at 1 MiB. Symbolic links in the release directory produce `RLA006` and are not read or hashed; manifest generation refuses linked bundles. Checksum references must name direct local assets: unsafe or nested paths produce `RLA207` and cannot count as coverage. Audit report output must be outside the release directory and must not follow symbolic links, so it cannot replace an audited artifact. Custom text manifest outputs remain supported; package-archive output destinations are refused.
+
 ## Development
 
 The project has no runtime dependencies. From the repository root:
