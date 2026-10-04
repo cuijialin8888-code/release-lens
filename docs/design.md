@@ -25,6 +25,14 @@ Finding codes are stable within the 0.1 line:
 Warnings are useful evidence, not proof of safety. `--strict` promotes them to
 the failing exit status and to error severity in reports.
 
+## Markdown reports
+
+Paths, filenames, versions, and evidence use escaped inline HTML `code` elements.
+Pipes are encoded so they cannot introduce table columns, and carriage returns
+and newlines appear as literal `\r` and `\n` so evidence stays on one line. Use a
+Markdown viewer that supports inline HTML, such as GitHub, or choose JSON for
+lossless structured data.
+
 ## Archive handling
 
 ZIP and tar members are inspected in place. Absolute names and names containing

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from html import escape
 from pathlib import Path
 
 from .audit import audit, write_manifest
@@ -49,19 +50,26 @@ def _text(report: Report) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _markdown_code(value: str) -> str:
+    # Inline HTML keeps backticks literal; entities keep table separators inert.
+    value = value.replace("\r", r"\r").replace("\n", r"\n")
+    return "<code>" + escape(value, quote=False).replace("|", "&#124;") + "</code>"
+
+
 def _markdown(report: Report) -> str:
-    lines = ["# Release Lens report", "", f"- Root: `{report.root}`", f"- Read-only: `true`"]
+    lines = ["# Release Lens report", "", f"- Root: {_markdown_code(report.root)}", "- Read-only: `true`"]
     if report.expected_version:
-        lines.append(f"- Expected version: `{report.expected_version}`")
+        lines.append(f"- Expected version: {_markdown_code(report.expected_version)}")
     lines.extend(["", "## Artifacts", "", "| Name | Kind | Size | Version | SHA-256 |", "| --- | --- | ---: | --- | --- |"])
     for artifact in report.artifacts:
-        lines.append(f"| `{artifact.name}` | {artifact.kind} | {artifact.size} | {artifact.version or '—'} | `{artifact.sha256}` |")
+        version = _markdown_code(artifact.version) if artifact.version else "—"
+        lines.append(f"| {_markdown_code(artifact.name)} | {artifact.kind} | {artifact.size} | {version} | {_markdown_code(artifact.sha256)} |")
     lines.extend(["", "## Findings", ""])
     if not report.findings:
         lines.append("No findings.")
     else:
         for finding in report.findings:
-            evidence = f" — `{finding.evidence}`" if finding.evidence else ""
+            evidence = f" — {_markdown_code(finding.evidence)}" if finding.evidence else ""
             lines.append(f"- **{finding.severity.upper()} `{finding.code}`**: {finding.message}{evidence}")
             if finding.next_step:
                 lines.append(f"  - Next: {finding.next_step}")
