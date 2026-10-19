@@ -5,12 +5,57 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from release_lens.audit import MAX_METADATA_BYTES, audit, write_manifest
 from release_lens.cli import main
 
 
 class ReleaseSafetyTests(unittest.TestCase):
+    def test_manifest_rejects_hard_link_before_hashing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "release"
+            root.mkdir()
+            asset = root / "asset.txt"
+            asset.write_bytes(b"preserve")
+            output = Path(directory) / "manifest.txt"
+            output.hardlink_to(asset)
+            with mock.patch("release_lens.audit._sha256") as hash_asset:
+                with self.assertRaisesRegex(ValueError, "hard link"):
+                    write_manifest(root, output)
+                hash_asset.assert_not_called()
+            self.assertEqual(asset.read_bytes(), b"preserve")
+            self.assertEqual(output.read_bytes(), b"preserve")
+
+    def test_audit_rejects_hard_link_before_scanning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "release"
+            root.mkdir()
+            asset = root / "asset.txt"
+            asset.write_bytes(b"preserve")
+            output = Path(directory) / "report.txt"
+            output.hardlink_to(asset)
+            with mock.patch("release_lens.cli.audit", wraps=audit) as scan:
+                with contextlib.redirect_stderr(io.StringIO()) as errors:
+                    code = main(["audit", str(root), "--output", str(output)])
+                self.assertEqual(code, 2)
+                self.assertIn("hard link", errors.getvalue())
+                scan.assert_not_called()
+            self.assertEqual(asset.read_bytes(), b"preserve")
+            self.assertEqual(output.read_bytes(), b"preserve")
+
+    def test_audit_can_replace_an_ordinary_external_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "release"
+            root.mkdir()
+            asset = root / "asset.txt"
+            asset.write_bytes(b"preserve")
+            output = Path(directory) / "report.txt"
+            output.write_bytes(b"old report")
+            self.assertEqual(main(["audit", str(root), "--output", str(output)]), 0)
+            self.assertIn("Release Lens", output.read_text(encoding="utf-8"))
+            self.assertEqual(asset.read_bytes(), b"preserve")
+
     def test_manifest_cannot_follow_an_output_link(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "release"

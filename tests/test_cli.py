@@ -47,7 +47,21 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("\n# injected", rendered)
         for line in rendered.splitlines():
             if "injected" in line:
-                self.assertIn(r"\r\n# injected", line)
+                parser = CodeTextParser()
+                parser.feed(line)
+                self.assertIn(r"\r\n# injected", parser.text)
+
+    def test_markdown_code_fields_keep_formatting_as_literal_text(self) -> None:
+        value = "**bold** [link](https://example.com) ~~strike~~"
+        report = Report(root=value, expected_version=value)
+        report.findings.append(Finding("RLA004", "error", "Unsafe path", value))
+        rendered = _markdown(report)
+        self.assertNotIn("**bold**", rendered)
+        self.assertNotIn("[link](https://example.com)", rendered)
+        self.assertNotIn("~~strike~~", rendered)
+        parser = CodeTextParser()
+        parser.feed(rendered)
+        self.assertEqual(parser.text.count(value), 3)
 
     def test_markdown_cli_keeps_archive_member_evidence_on_one_line(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

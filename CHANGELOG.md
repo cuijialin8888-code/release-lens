@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Reject hard-linked manifest and audit report destinations before hashing or scanning, preserving the files they alias.
+- Preserve Markdown formatting characters and URLs as literal text inside report code fields.
 - Keep special characters in filenames, versions, paths, and evidence from breaking Markdown tables or introducing report markup.
 - Harden cross-platform archive paths, bound metadata reads, reject linked release assets and non-local checksum references, and protect audited artifacts from report writes.
 
