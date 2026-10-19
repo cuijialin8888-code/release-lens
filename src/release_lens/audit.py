@@ -316,6 +316,8 @@ def write_manifest(root: Path, output: Path) -> int:
     output = output.expanduser()
     if output.is_symlink():
         raise ValueError("Manifest output cannot follow symbolic links")
+    if output.exists() and output.stat().st_nlink > 1:
+        raise ValueError("Manifest output cannot replace a hard link")
     if _kind(output) in {"wheel", "sdist", "zip"}:
         raise ValueError("Manifest output cannot replace a package archive")
     output = output.expanduser().resolve()

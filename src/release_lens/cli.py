@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import string
 import sys
-from html import escape
 from pathlib import Path
 
 from .audit import audit, write_manifest
@@ -51,9 +51,10 @@ def _text(report: Report) -> str:
 
 
 def _markdown_code(value: str) -> str:
-    # Inline HTML keeps backticks literal; entities keep table separators inert.
+    # Entities prevent Markdown and automatic links inside inline HTML code.
     value = value.replace("\r", r"\r").replace("\n", r"\n")
-    return "<code>" + escape(value, quote=False).replace("|", "&#124;") + "</code>"
+    encoded = "".join(f"&#{ord(char)};" if char in string.punctuation else char for char in value)
+    return "<code>" + encoded + "</code>"
 
 
 def _markdown(report: Report) -> str:
@@ -98,8 +99,6 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"Wrote {output} covering {count} artifact(s).")
         return 0
-    report = audit(args.path, args.expected_version, args.strict)
-    rendered = _render(report, args.format)
     if args.output:
         try:
             output = args.output.expanduser()
@@ -109,6 +108,15 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("audit report output must be outside the release directory")
             if output.is_symlink():
                 raise ValueError("audit report output cannot follow symbolic links")
+            if output.exists() and output.stat().st_nlink > 1:
+                raise ValueError("audit report output cannot replace a hard link")
+        except (OSError, ValueError) as exc:
+            print(f"release-lens: cannot write report: {exc}", file=sys.stderr)
+            return 2
+    report = audit(args.path, args.expected_version, args.strict)
+    rendered = _render(report, args.format)
+    if args.output:
+        try:
             output.write_text(rendered, encoding="utf-8", newline="\n")
         except (OSError, ValueError) as exc:
             print(f"release-lens: cannot write report: {exc}", file=sys.stderr)
